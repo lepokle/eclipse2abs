@@ -11,5 +11,5 @@ Usage
 - a PKGBUILD file is created in the working directory
 
 ### Notes:
-- <templatefile> is the file that you have customized
-- <updatesite> is the URL of the eclipse update site (without site.xml)
+- \<templatefile\> is the file that you have customized
+- \<updatesite\> is the URL of the eclipse update site (without site.xml)
