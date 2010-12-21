@@ -7,7 +7,7 @@ Usage
 -----
 - install eclipse2abs from [AUR](http://aur.archlinux.org/).
 - copy PKGBUILD.tmpl from /usr/share/doc/eclipse2abs and customize it to your needs
-- run eclipse2abs <templatefile> <updatesite>
+- run eclipse2abs \<templatefile\> \<updatesite\>
 - a PKGBUILD file is created in the working directory
 
 ### Notes:
