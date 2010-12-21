@@ -1,0 +1,189 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+use LWP::Simple;
+use XML::Simple;
+use Archive::Extract;
+use File::Temp ( 'tempfile', 'tempdir' );
+use Scalar::Util 'reftype';
+use Digest::MD5;
+
+# ----------------------------
+exit main();
+
+# ----------------------------
+
+sub printUsage() {
+	print STDERR "Usage: eclipse2abs <template> <updatesite>\n";
+}
+
+sub main {
+	if ( @ARGV != 2 ) {
+		printUsage();
+		return 1;
+	}
+
+	my $templatefile = $ARGV[0];
+	my $updatesite  = $ARGV[1];
+	$updatesite =~ s|/$||;
+
+	my $feature_hash       = get_feature_hash( $updatesite . '/site.xml' );
+	my $jarfile            = download_feature_jar("$updatesite/$feature_hash->{'url'}");
+	my $feature_xml        = extract_feature_xml($jarfile);
+	my $plugin_definitions = extract_plugin_definitions($feature_xml);
+	my $sources            = build_sources_array( $updatesite, $feature_hash, $plugin_definitions );
+	my $plugin_jars        = build_plugin_jars($sources);
+	my $feature_jars       = build_feature_jars($sources);
+	my $md5sums            = build_md5sums($sources);
+
+	my $options = {
+		pkgver       => $feature_hash->{'version'},
+		source       => $sources,
+		noextract    => $sources,
+		md5sums      => $md5sums,
+		plugin_jars  => "'" . join( "' '", @{$plugin_jars} ) . "'",
+		feature_jars => "'" . join( "' '", @{$feature_jars} ) . "'"
+	};
+	configure_pkgbuild( $templatefile, $options );
+
+	return 0;
+}
+
+sub get_feature_hash {
+	my ($updatesite) = @_;
+
+	my $xml_page = get($updatesite) or die "Cannot load updatesite $updatesite: $!";
+	my $xml_document = XMLin( $xml_page, KeyAttr => [], ForceArray => 1 )
+	  or die "Cannot parse site.xml from updatesite: $!";
+
+	my $lastFeature = $xml_document->{'feature'}[-1];
+	return $lastFeature;
+}
+
+sub download_feature_jar {
+	my ($url) = @_;
+	my ( $fh, $filename ) = tempfile();
+
+	print "Download feature jar from $url...";
+	if ( getstore( $url, $filename ) != 200 ) {
+		die "Cannot load $url to $filename: $!";
+	}
+	print "ok [$filename]\n";
+	return $filename;
+}
+
+sub extract_feature_xml {
+	my ($jarfile) = @_;
+
+	my $archive = Archive::Extract->new( archive => $jarfile, type => 'zip' );
+	my $tempdir = tempdir( CLEANUP => 1 );
+	$archive->extract( to => $tempdir ) or die "Cannot extract jarfile $jarfile to $tempdir";
+
+	print "feature.xml extracted to $tempdir/feature.xml\n";
+	return "$tempdir/feature.xml";
+}
+
+sub extract_plugin_definitions {
+	my ($feature_xml) = @_;
+	my $xml_document = XMLin( $feature_xml, KeyAttr => [], ForceArray => 1 )
+	  or die "Cannot parse $feature_xml: $!";
+	my $plugins = [];
+
+	for my $plugin ( @{ $xml_document->{'plugin'} } ) {
+		if ( ref $plugin && reftype($plugin) eq "HASH" ) {
+			push( @{$plugins}, $plugin );
+		}
+	}
+
+	return $plugins;
+}
+
+sub configure_pkgbuild {
+	my ( $template, $options ) = @_;
+
+	open my $template_handle, '<', $template  or die "Cannot open template file $template: $!";
+	open my $output_handle,   '>', 'PKGBUILD' or die "Cannot create PKBUILD: $!";
+
+	while ( my $line = <$template_handle> ) {
+		while ( my ( $key, $value ) = each %{$options} ) {
+			if ( ref $value && reftype($value) eq 'ARRAY' ) {
+				$value = "'" . join( "'\n\t'", @{$value} ) . "'";
+			}
+
+			$line =~ s/\$\{$key\}/$value/g;
+		}
+		print $output_handle "$line";
+	}
+
+	close($template_handle);
+	close($output_handle);
+}
+
+sub build_sources_array {
+	my ( $updatesite, $feature_hash, $plugin_definitions ) = @_;
+	my @sources;
+
+	push( @sources, "$updatesite/$feature_hash->{'url'}" );
+	for my $plugin ( @{$plugin_definitions} ) {
+		push( @sources, "$updatesite/plugins/$plugin->{'id'}_$plugin->{'version'}.jar" );
+	}
+
+	return \@sources;
+}
+
+sub build_md5sums {
+	my ($sources) = @_;
+	my $tempdir = tempdir( CLEANUP => 1 );
+	my @md5sums;
+
+	my $i = 0;
+	for my $source ( @{$sources} ) {
+		getstore( $source, "$tempdir/$i" );
+		push( @md5sums, build_md5sum("$tempdir/$i") );
+		$i += 1;
+	}
+
+	return \@md5sums;
+}
+
+sub build_md5sum {
+	my ($file) = @_;
+
+	open my $file_handle, '<', $file or die "Can't open '$file': $!";
+	binmode($file_handle);
+
+	my $md5 = Digest::MD5->new;
+	return $md5->addfile(*$file_handle)->hexdigest;
+}
+
+sub build_plugin_jars {
+	my ($sources) = @_;
+	my $plugin_jar;
+	my @plugin_jars;
+
+	for my $source ( @{$sources} ) {
+		if ( $source =~ m|/plugins/| ) {
+			( $plugin_jar = $source ) =~ s|.*/([^/]*)$|$1|;
+			push( @plugin_jars, $plugin_jar );
+		}
+	}
+
+	return \@plugin_jars;
+}
+
+sub build_feature_jars {
+	my ($sources) = @_;
+	my $feature_jar;
+	my @feature_jars;
+
+	for my $source ( @{$sources} ) {
+		if ( $source =~ m|/features/| ) {
+			( $feature_jar = $source ) =~ s|.*/([^/]*)$|$1|;
+			push( @feature_jars, $feature_jar );
+		}
+	}
+
+	return \@feature_jars;
+}
+

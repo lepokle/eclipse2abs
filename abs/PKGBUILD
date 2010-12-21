@@ -1,0 +1,24 @@
+pkgname=eclipse2abs
+pkgver=0.0.1
+pkgrel=0
+pkgdesc="Simple perl script to create an arch linux package from an eclipse update site."
+arch=(i686 x86_64)
+url="http://e-p-i-c.sourceforge.net/"
+license=('GPL3')
+depends=('perl')
+source=('')
+md5sums=('')
+
+build() {
+        mkdir -p $pkgdir/usr/bin
+        mkdir -p $pkdir/usr/share/doc/eclipse2abs
+        
+        cp eclipse2abs $pkgdir/usr/bin
+        cp PKGBUILD.tmpl $pkdir/usr/share/doc/eclipse2abs
+
+        chmod 755  $pkgdir/usr/bin/eclipse2abs
+}
+
+post_install () {
+    echo "Look at /usr/share/doc/eclipse2abs/PKGBUILD.tmpl for an example of an template file."
+}

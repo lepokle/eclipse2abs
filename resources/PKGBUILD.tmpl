@@ -1,0 +1,24 @@
+pkgname=eclipse-epic
+plugindir=epic
+pkgver=${pkgver}
+pkgrel=0
+pkgdesc="Perl development framework for the Eclipse platform"
+arch=(i686 x86_64)
+url="http://e-p-i-c.sourceforge.net/"
+license=('GPL')
+depends=('eclipse' 'perl')
+source=(${source})
+noextract=(${noextract})
+md5sums=(${md5sums})
+
+build() {
+        mkdir -p $pkgdir/usr/share/eclipse/dropins/$plugindir/eclipse/features
+        mkdir -p $pkgdir/usr/share/eclipse/dropins/$plugindir/eclipse/plugins
+        
+        cp ${feature_jars} $pkgdir/usr/share/eclipse/dropins/$plugindir/eclipse/features
+        cp ${plugin_jars} $pkgdir/usr/share/eclipse/dropins/$plugindir/eclipse/plugins
+        
+
+        find $pkgdir/usr/share/eclipse -type d -exec chmod 755 {} \;
+        find $pkgdir/usr/share/eclipse -type f -exec chmod 644 {} \;
+}
