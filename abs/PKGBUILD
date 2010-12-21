@@ -6,15 +6,16 @@ arch=(i686 x86_64)
 url="https://github.com/lepokle/eclipse2abs"
 license=('GPL3')
 depends=('perl')
-source=('')
-md5sums=('')
+source=('https://github.com/lepokle/eclipse2abs/raw/version-$pkgver/resources/PKGBUILD.tmpl'
+    'https://github.com/lepokle/eclipse2abs/raw/version-$pkgver/src/eclipse2abs')
+md5sums=('afe9be20bcfac1ea09ce5c8a05da5898' '008c8f0a67edb10530b3d2874607d389')
 
 build() {
         mkdir -p $pkgdir/usr/bin
-        mkdir -p $pkdir/usr/share/doc/eclipse2abs
+        mkdir -p $pkgdir/usr/share/doc/eclipse2abs
         
         cp eclipse2abs $pkgdir/usr/bin
-        cp PKGBUILD.tmpl $pkdir/usr/share/doc/eclipse2abs
+        cp PKGBUILD.tmpl $pkgdir/usr/share/doc/eclipse2abs
 
         chmod 755  $pkgdir/usr/bin/eclipse2abs
 }
