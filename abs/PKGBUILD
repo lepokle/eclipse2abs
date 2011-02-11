@@ -1,5 +1,5 @@
 pkgname=eclipse2abs
-pkgver=0.0.1
+pkgver=0.0.2
 pkgrel=0
 pkgdesc="Simple perl script to create an arch linux package from an eclipse update site."
 arch=(i686 x86_64)

@@ -8,6 +8,7 @@ use Archive::Extract;
 use File::Temp ( 'tempfile', 'tempdir' );
 use Scalar::Util 'reftype';
 use Digest::MD5;
+use version;
 
 # ----------------------------
 exit main();
@@ -25,20 +26,34 @@ sub main {
 	}
 
 	my $templatefile = $ARGV[0];
-	my $updatesite  = $ARGV[1];
+	my $updatesite   = $ARGV[1];
 	$updatesite =~ s|/$||;
 
-	my $feature_hash       = get_feature_hash( $updatesite . '/site.xml' );
-	my $jarfile            = download_feature_jar("$updatesite/$feature_hash->{'url'}");
-	my $feature_xml        = extract_feature_xml($jarfile);
-	my $plugin_definitions = extract_plugin_definitions($feature_xml);
-	my $sources            = build_sources_array( $updatesite, $feature_hash, $plugin_definitions );
-	my $plugin_jars        = build_plugin_jars($sources);
-	my $feature_jars       = build_feature_jars($sources);
-	my $md5sums            = build_md5sums($sources);
+	my $sources      = [];
+	my $md5sums      = [];
+	my $plugin_jars  = [];
+	my $feature_jars = [];
+
+	my $features = get_features( $updatesite . '/site.xml' );
+	$features = filter_features_with_same_id($features);
+	for my $feature ( @{$features} ) {
+		if($feature->{id} !~ /org\.eclipse\..*/) {
+			my $jarfile            = download_feature_jar("$updatesite/$feature->{'url'}");
+			my $feature_xml        = extract_feature_xml($jarfile);
+			my $plugin_definitions = extract_plugin_definitions($feature_xml);
+			my $feature_sources    = build_sources_array( $updatesite, $feature, $plugin_definitions );
+
+			push( @{$sources},      @{$feature_sources} );
+			push( @{$plugin_jars},  build_plugin_jars($feature_sources) );
+			push( @{$feature_jars}, build_feature_jars($feature_sources) );
+			push( @{$md5sums},      build_md5sums($feature_sources) );
+			
+			push( @{$features}, extract_included_features($feature_xml));
+		}
+	}
 
 	my $options = {
-		pkgver       => $feature_hash->{'version'},
+		pkgver       => $features->[0]->{'version'},
 		source       => $sources,
 		noextract    => $sources,
 		md5sums      => $md5sums,
@@ -50,15 +65,43 @@ sub main {
 	return 0;
 }
 
-sub get_feature_hash {
+sub get_features {
 	my ($updatesite) = @_;
 
 	my $xml_page = get($updatesite) or die "Cannot load updatesite $updatesite: $!";
 	my $xml_document = XMLin( $xml_page, KeyAttr => [], ForceArray => 1 )
 	  or die "Cannot parse site.xml from updatesite: $!";
 
-	my $lastFeature = $xml_document->{'feature'}[-1];
-	return $lastFeature;
+	my @features = $xml_document->{'feature'};
+	return \@{ $features[0] };
+}
+
+sub filter_features_with_same_id {
+	my ($features) = @_;
+	my @filtered_features;
+	my %feature_id_to_feature;
+	my $feature;
+	
+	for $feature (@{$features}) {
+			if(exists $feature_id_to_feature{$feature->{'id'}}) {
+					my $existing_feature = $feature_id_to_feature{$feature->{'id'}};
+					if(version->parse($feature->{'version'}) > version->parse($existing_feature->{'version'})) {
+						$feature_id_to_feature{$feature->{'id'}} = $feature;
+					}
+			}
+			else {
+				$feature_id_to_feature{$feature->{'id'}} = $feature;
+			}
+	}
+	
+	for $feature (@{$features}) {
+			if(exists $feature_id_to_feature{$feature->{'id'}}) {
+					push(@filtered_features, $feature_id_to_feature{$feature->{'id'}});
+					delete  $feature_id_to_feature{$feature->{'id'}};
+			}
+	}
+	
+	return \@filtered_features;
 }
 
 sub download_feature_jar {
@@ -78,7 +121,8 @@ sub extract_feature_xml {
 
 	my $archive = Archive::Extract->new( archive => $jarfile, type => 'zip' );
 	my $tempdir = tempdir( CLEANUP => 1 );
-	$archive->extract( to => $tempdir ) or die "Cannot extract jarfile $jarfile to $tempdir";
+	$archive->extract( to => $tempdir )
+	  or die "Cannot extract jarfile $jarfile to $tempdir: " . $archive->error();
 
 	print "feature.xml extracted to $tempdir/feature.xml\n";
 	return "$tempdir/feature.xml";
@@ -97,6 +141,23 @@ sub extract_plugin_definitions {
 	}
 
 	return $plugins;
+}
+
+sub extract_included_features {
+	my ($feature_xml) = @_;
+	
+	my $xml_document = XMLin( $feature_xml, KeyAttr => [], ForceArray => 1 )
+	  or die "Cannot parse $feature_xml: $!";
+	my $features = [];
+
+	for my $feature ( @{ $xml_document->{'includes'} } ) {
+		if ( ref $feature && reftype($feature) eq "HASH" ) {
+			$feature->{'url'} = "features/$feature->{'id'}_$feature->{'version'}.jar";
+			push( @{$features}, $feature );
+		}
+	}
+
+	return @{$features};
 }
 
 sub configure_pkgbuild {
@@ -144,7 +205,7 @@ sub build_md5sums {
 		$i += 1;
 	}
 
-	return \@md5sums;
+	return @md5sums;
 }
 
 sub build_md5sum {
@@ -169,7 +230,7 @@ sub build_plugin_jars {
 		}
 	}
 
-	return \@plugin_jars;
+	return @plugin_jars;
 }
 
 sub build_feature_jars {
@@ -184,6 +245,6 @@ sub build_feature_jars {
 		}
 	}
 
-	return \@feature_jars;
+	return @feature_jars;
 }
 
