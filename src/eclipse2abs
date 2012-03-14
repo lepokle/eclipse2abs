@@ -17,6 +17,7 @@ exit main();
 
 sub printUsage() {
 	print STDERR "Usage: eclipse2abs <template> <updatesite>\n";
+        print STDERR "The output is written to the file PKGBUILD. Therefore you must not use the file PKGBUILD as template!\n";
 }
 
 sub main {
@@ -136,7 +137,10 @@ sub extract_plugin_definitions {
 
 	for my $plugin ( @{ $xml_document->{'plugin'} } ) {
 		if ( ref $plugin && reftype($plugin) eq "HASH" ) {
+			print "Adding plugin $plugin->{'id'}\n";
 			push( @{$plugins}, $plugin );
+		} else {
+			print STDERR "Warning: $plugin is not a hash reference!\n";
 		}
 	}
 
