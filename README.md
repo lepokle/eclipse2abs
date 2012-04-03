@@ -1,7 +1,8 @@
 eclipse2abs
 ===========
 
-A simple perl script to create an archlinux package from an eclipse update site.
+A simple perl script to create an archlinux package for an eclipse plugin from its update site.
+This script will not work for the eclipse platform itself.
 
 Usage
 -----
