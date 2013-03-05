@@ -44,7 +44,7 @@ sub main {
 			my $plugin_definitions = extract_plugin_definitions($feature_xml);
 			my $feature_sources    = build_sources_array( $updatesite, $feature, $plugin_definitions );
 
-			push( @{$sources},      @{$feature_sources} );
+			push( @{$sources},      build_source_urls($feature_sources) );
 			push( @{$plugin_jars},  build_plugin_jars($feature_sources) );
 			push( @{$feature_jars}, build_feature_jars($feature_sources) );
 			push( @{$md5sums},      build_md5sums($feature_sources) );
@@ -222,6 +222,23 @@ sub build_md5sum {
 	return $md5->addfile(*$file_handle)->hexdigest;
 }
 
+sub build_source_urls {
+	my ($sources) = @_;
+    my $jar;
+    my @source_urls;
+
+	for my $source ( @{$sources} ) {
+		( $jar = $source ) =~ s|.*/([^/]*)$|$1|;
+		if ( $source =~ m|/plugins/| ) {
+			push( @source_urls, "plugin_${jar}::$source" );
+		} elsif ( $source =~ m|/features/| ) {
+			push( @source_urls, "feature_${jar}::$source" );
+        }
+	}
+
+    return @source_urls;
+}
+
 sub build_plugin_jars {
 	my ($sources) = @_;
 	my $plugin_jar;
@@ -230,7 +247,7 @@ sub build_plugin_jars {
 	for my $source ( @{$sources} ) {
 		if ( $source =~ m|/plugins/| ) {
 			( $plugin_jar = $source ) =~ s|.*/([^/]*)$|$1|;
-			push( @plugin_jars, $plugin_jar );
+			push( @plugin_jars, "plugin_$plugin_jar" );
 		}
 	}
 
@@ -245,7 +262,7 @@ sub build_feature_jars {
 	for my $source ( @{$sources} ) {
 		if ( $source =~ m|/features/| ) {
 			( $feature_jar = $source ) =~ s|.*/([^/]*)$|$1|;
-			push( @feature_jars, $feature_jar );
+			push( @feature_jars, "feature_$feature_jar" );
 		}
 	}
 
