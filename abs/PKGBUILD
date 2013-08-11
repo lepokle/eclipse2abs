@@ -5,7 +5,7 @@ pkgdesc="A simple perl script to create an archlinux package for an eclipse plug
 arch=(i686 x86_64)
 url="https://github.com/lepokle/eclipse2abs"
 license=('GPL3')
-depends=('perl' 'perl-libwww', 'unzip')
+depends=('perl' 'perl-libwww' 'unzip')
 source=('https://github.com/lepokle/eclipse2abs/raw/version-$pkgver/resources/PKGBUILD.tmpl'
     'https://github.com/lepokle/eclipse2abs/raw/version-$pkgver/src/eclipse2abs')
 md5sums=('75a3db299f417fb4f00ff143660b0371' '265bea052a8a8752197f7d48e115509a')
