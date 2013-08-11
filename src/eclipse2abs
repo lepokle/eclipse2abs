@@ -4,7 +4,6 @@ use strict;
 use warnings;
 use LWP::Simple;
 use XML::Simple;
-use Archive::Extract;
 use File::Temp ( 'tempfile', 'tempdir' );
 use Scalar::Util 'reftype';
 use Digest::MD5;
@@ -120,10 +119,9 @@ sub download_feature_jar {
 sub extract_feature_xml {
 	my ($jarfile) = @_;
 
-	my $archive = Archive::Extract->new( archive => $jarfile, type => 'zip' );
 	my $tempdir = tempdir( CLEANUP => 1 );
-	$archive->extract( to => $tempdir )
-	  or die "Cannot extract jarfile $jarfile to $tempdir: " . $archive->error();
+    `unzip $jarfile -d $tempdir`
+	  or die "Cannot extract jarfile $jarfile to $tempdir: $!";
 
 	print "feature.xml extracted to $tempdir/feature.xml\n";
 	return "$tempdir/feature.xml";
