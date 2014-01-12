@@ -11,7 +11,7 @@ source=(${source})
 noextract=(${noextract})
 md5sums=(${md5sums})
 
-build() {
+package() {
         mkdir -p $pkgdir/usr/share/eclipse/dropins/$plugindir/eclipse/features
         mkdir -p $pkgdir/usr/share/eclipse/dropins/$plugindir/eclipse/plugins
         
