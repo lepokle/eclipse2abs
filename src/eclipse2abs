@@ -34,20 +34,29 @@ sub main {
 	my $plugin_jars  = [];
 	my $feature_jars = [];
 
-	my $features = get_features( $updatesite . '/site.xml' );
+    my $site = get_site("$updatesite/site.xml");
+	my @associatedSites = get_associated_sites($site);
+	
+	my $features = get_features( $site );
 	$features = filter_features_with_same_id($features);
+	
 	for my $feature ( @{$features} ) {
 		if($feature->{id} !~ /org\.eclipse\..*/) {
+			my $tempdir            = tempdir( CLEANUP => 1 ); 
+			
 			my $jarfile            = download_feature_jar("$updatesite/$feature->{'url'}");
 			my $feature_xml        = extract_feature_xml($jarfile);
 			my $plugin_definitions = extract_plugin_definitions($feature_xml);
-			my $feature_sources    = build_sources_array( $updatesite, $feature, $plugin_definitions );
+			my $feature_sources    = build_sources_array($feature, $plugin_definitions );
 
-			push( @{$sources},      build_source_urls($feature_sources) );
+            my $files              = download_files($tempdir, $feature_sources, $updatesite, @associatedSites);
+            
+            push( @{$sources},      build_source_urls($feature_sources, $files) );
 			push( @{$plugin_jars},  build_plugin_jars($feature_sources) );
-			push( @{$feature_jars}, build_feature_jars($feature_sources) );
-			push( @{$md5sums},      build_md5sums($feature_sources) );
+            push( @{$feature_jars}, build_feature_jars($feature_sources) );
+            push( @{$md5sums},      build_md5sums($feature_sources, $files) );
 			
+            
 			push( @{$features}, extract_included_features($feature_xml));
 		}
 	}
@@ -65,14 +74,38 @@ sub main {
 	return 0;
 }
 
+sub get_site {
+    my ($updatesite) = @_;
+
+    my $xml_page = get($updatesite) or die "Cannot load updatesite $updatesite: $!";
+    my $xml_document = XMLin( $xml_page, KeyAttr => [], ForceArray => 1 )
+      or die "Cannot parse site.xml from updatesite: $!";
+    	
+	return $xml_document;
+}
+
+sub get_associated_sites {
+    my ($site) = @_;	
+    my $xml_url = $site->{'associateSitesURL'};
+    my @urls;
+    
+    return () if ! $xml_url;
+    
+    my $xml_page = get($xml_url) or die "Cannot load associated sites $xml_url: $!";
+    my $xml_document = XMLin( $xml_page, KeyAttr => [], ForceArray => 1 )
+      or die "Cannot xml file from $xml_url: $!";
+
+    for my $site (@{$xml_document->{'associateSite'}}) {
+    	push( @urls, $site->{'url'});
+    }
+    
+    return @urls;
+}
+
 sub get_features {
-	my ($updatesite) = @_;
+	my ($site) = @_;
 
-	my $xml_page = get($updatesite) or die "Cannot load updatesite $updatesite: $!";
-	my $xml_document = XMLin( $xml_page, KeyAttr => [], ForceArray => 1 )
-	  or die "Cannot parse site.xml from updatesite: $!";
-
-	my @features = $xml_document->{'feature'};
+	my @features = $site->{'feature'};
 	return \@{ $features[0] };
 }
 
@@ -165,6 +198,7 @@ sub extract_included_features {
 sub configure_pkgbuild {
 	my ( $template, $options ) = @_;
 
+    print "Configure PKGBUILD\n";
 	open my $template_handle, '<', $template  or die "Cannot open template file $template: $!";
 	open my $output_handle,   '>', 'PKGBUILD' or die "Cannot create PKBUILD: $!";
 
@@ -184,26 +218,61 @@ sub configure_pkgbuild {
 }
 
 sub build_sources_array {
-	my ( $updatesite, $feature_hash, $plugin_definitions ) = @_;
+	my ($feature_hash, $plugin_definitions ) = @_;
 	my @sources;
 
-	push( @sources, "$updatesite/$feature_hash->{'url'}" );
+	push( @sources, "/$feature_hash->{'url'}" );
 	for my $plugin ( @{$plugin_definitions} ) {
-		push( @sources, "$updatesite/plugins/$plugin->{'id'}_$plugin->{'version'}.jar" );
+		# /plugins/ is necessary for later matches
+		push( @sources, "/plugins/$plugin->{'id'}_$plugin->{'version'}.jar" );
 	}
 
 	return \@sources;
 }
 
+sub download_files {
+	my ($tempdir, $sources, @downloadSites) = @_;
+	my $files = {};
+	
+	my $i = 0;
+    for my $source ( @{$sources} ) {
+        my $url = download_source( $source, "$tempdir/$i", @downloadSites );
+        $files->{$source} = {
+            url => $url,
+            file => "$tempdir/$i"
+        };
+        $i += 1;
+    }
+    
+    return $files;
+}
+
+sub download_source {
+    my ($source, $destination, @downloadSites) = @_;
+
+    for my $baseurl (@downloadSites) {
+        my $url = "$baseurl/$source";
+        
+        print "Download $url";
+        my $code = getstore( $url, $destination );
+        if( $code == 200 ) {
+            print "    OK [$destination]\n";
+            return $url;
+        } else {
+            print "    FAILED ($code)\n";
+        }
+    }
+    
+    die "Cannot download $source from @downloadSites!\n";
+}
+
 sub build_md5sums {
-	my ($sources) = @_;
-	my $tempdir = tempdir( CLEANUP => 1 );
+	my ($sources, $files) = @_;
 	my @md5sums;
 
 	my $i = 0;
 	for my $source ( @{$sources} ) {
-		getstore( $source, "$tempdir/$i" );
-		push( @md5sums, build_md5sum("$tempdir/$i") );
+		push( @md5sums, build_md5sum($files->{$source}->{'file'}) );
 		$i += 1;
 	}
 
@@ -221,17 +290,21 @@ sub build_md5sum {
 }
 
 sub build_source_urls {
-	my ($sources) = @_;
+	my ($sources, $files) = @_;
     my $jar;
+    my $url;
     my @source_urls;
 
 	for my $source ( @{$sources} ) {
 		( $jar = $source ) =~ s|.*/([^/]*)$|$1|;
 		if ( $source =~ m|/plugins/| ) {
-			push( @source_urls, "plugin_${jar}::$source" );
+			$url = "plugin_${jar}::$files->{$source}->{'url'}";
 		} elsif ( $source =~ m|/features/| ) {
-			push( @source_urls, "feature_${jar}::$source" );
+			$url = "feature_${jar}::$files->{$source}->{'url'}" ;
         }
+        
+        $url =~ s#//#/#g;
+        push( @source_urls, $url );
 	}
 
     return @source_urls;
