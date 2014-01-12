@@ -221,6 +221,7 @@ sub build_sources_array {
 	my ($feature_hash, $plugin_definitions ) = @_;
 	my @sources;
 
+	# /features/ is necessary for later matches
 	push( @sources, "/$feature_hash->{'url'}" );
 	for my $plugin ( @{$plugin_definitions} ) {
 		# /plugins/ is necessary for later matches
@@ -303,7 +304,7 @@ sub build_source_urls {
 			$url = "feature_${jar}::$files->{$source}->{'url'}" ;
         }
         
-        $url =~ s#//#/#g;
+        $url =~ s#([^:])//#$1/#g;
         push( @source_urls, $url );
 	}
 
