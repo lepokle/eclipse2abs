@@ -118,9 +118,19 @@ sub filter_features_with_same_id {
 	for $feature (@{$features}) {
 			if(exists $feature_id_to_feature{$feature->{'id'}}) {
 					my $existing_feature = $feature_id_to_feature{$feature->{'id'}};
-					if(version->parse($feature->{'version'}) > version->parse($existing_feature->{'version'})) {
-						$feature_id_to_feature{$feature->{'id'}} = $feature;
-					}
+                    print "WARN: Found duplicate feature [$feature->{'id'}] with versions: [$feature->{'version'}] <-> [$existing_feature->{'version'}]\n";
+                    if(version->is_lax($feature->{'version'}) && version->is_lax($existing_feature->{'version'})) {
+                        print "Compare versions numerically...";
+    					if(version->parse($feature->{'version'}) > version->parse($existing_feature->{'version'})) {
+                            print "use second version [$feature->{'version'}]\n";
+     						$feature_id_to_feature{$feature->{'id'}} = $feature;
+	    				} else {
+                            print "use first version [$existing_feature->{'version'}]\n";
+                        }
+                    } else {
+                        print "Cannot compare the versions numerically. Use the second one: [$existing_feature->{'version'}].\n";
+                        $feature_id_to_feature{$feature->{'id'}} = $feature;
+                    }
 			}
 			else {
 				$feature_id_to_feature{$feature->{'id'}} = $feature;
@@ -141,6 +151,7 @@ sub download_feature_jar {
 	my ($url) = @_;
 	my ( $fh, $filename ) = tempfile();
 
+    $url =~ s#([^:])//#$1/#g;
 	print "Download feature jar from $url...";
 	if ( getstore( $url, $filename ) != 200 ) {
 		die "Cannot load $url to $filename: $!";
@@ -254,6 +265,7 @@ sub download_source {
     for my $baseurl (@downloadSites) {
         my $url = "$baseurl/$source";
         
+        $url =~ s#([^:])//#$1/#g;
         print "Download $url";
         my $code = getstore( $url, $destination );
         if( $code == 200 ) {
